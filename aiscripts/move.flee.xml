@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<diff>
+  <replace sel="/aiscript[@name='move.flee']/init/do_if[@value='not $method or not (typeof $method).isnumeric or ($method lt 1) or ($method gt 5)']" pos="before">
+    <do_if value="not $method or not (typeof $method).isnumeric or ($method lt 1) or ($method gt 6)">
+      <debug_text text="'method %s, type: %s'.[$method, typeof $method]" chance="$debugchance"/>
+      <do_if value="$method == 'highway'">
+        <set_value name="$method" exact="1"/>
+      </do_if>
+      <do_elseif value="$method == 'dock'">
+        <set_value name="$method" exact="2"/>
+      </do_elseif>
+      <do_elseif value="$method == 'boost'">
+        <set_value name="$method" exact="3"/>
+      </do_elseif>
+      <do_elseif value="$method == 'maneuver'">
+        <set_value name="$method" exact="4"/>
+      </do_elseif>
+      <do_elseif value="$method == 'fleet'">
+        <set_value name="$method" exact="5"/>
+      </do_elseif>
+      <do_else>
+        <set_value name="$method" exact="6"/>
+      </do_else>
+    </do_if>
+  </add>
+
+  <add sel="/aiscript[@name='move.flee']/attention[@min='unknown']/do_if[@value='$method == 5']" pos="before">
+    <!-- fleet -->
+    <do_if value="$method == 4">
+      <resume label="fleet" />
+    </do_if>
+
+  </add>
+
+  <add sel="/aiscript[@name='move.flee']/attention[@min='unknown']/label[@name='highway']" pos="before">
+    <label name="fleet" />
+    <run_script name="'move.flee.fleet'" result="$success">
+      <param name="attacker" value="$attacker" />
+    </run_script>
+    <do_if value="$success">
+      <resume label="done"/>
+    </do_if>
+    <do_elseif value="this.assignedcontrolled.primarypurpose == purpose.fight">
+      <resume label="boost"/>
+    </do_elseif>
+
+  </add>
+</diff>

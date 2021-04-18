@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="iso-8859-1" ?>
+<aiscript name="move.flee.fleet" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="aiscripts.xsd" version="1">
+  <!--  
+    Flee to captital ship in fleet that you can dock too. Prefer ships that can repair. 
+    TODO: Force ship to repair after docked if it can.
+  -->
+  <params>
+    <param name="attacker" default="null" comment="the attacker we are fleeing from" />
+    <param name="panic" default="false" />
+    <param name="alreadydocked" default="this.ship.dock"/>
+    <param name="debugchance" default="0" />
+  </params>
+  <interrupts>
+    <handler ref="TargetInvalidHandler"/>
+    <handler>
+      <!-- important that the event is consumed by this handler. -->
+      <conditions>
+        <event_object_signalled object="this" param="'patch_flee_abort'"/>
+      </conditions>
+      <actions>
+        <abort_called_scripts resume="undock"/>
+      </actions>
+    </handler>
+  </interrupts>
+  <attention min="unknown">
+    <actions>
+      <do_if value="not this.assignedcontrolled.fleet.commander.exists">
+        <return value="false"/>
+      </do_if>
+
+      <do_if value="this.assignedcontrolled.iscapitalship">
+        <return value="false"/>
+      </do_if>
+
+      <do_if value="this.assignedcontrolled.subordinates.count">
+        <return value="false"/>
+      </do_if>
+
+      <do_if value="$alreadydocked">
+        <resume label="checkifsafe"/>
+      </do_if>
+
+      <label name="damageCheck" />
+
+      <find_object_component name="$damagedcomponents" object="this.ship" checkoperational="false" multiple="true">
+        <match_any>
+          <match restorable="true" comment="wrecked"/>
+          <match repairable="true" invulnerable="false">
+            <match_hull min="100" negate="true"/>
+          </match>
+          <match needsrepair="true" invulnerable="false">
+            <match_hull min="100" negate="true"/>
+          </match>
+        </match_any>
+      </find_object_component>
+
+      <set_value name="$damaged" exact="this.ship.hull != this.ship.maxhull or ($damagedcomponents.count gt 0 and $damagedcomponents.{1}.exists)"/>
+
+      <do_if value="not $damaged and this.ship.primarypurpose == purpose.fight">
+        <debug_text text="'combat ship with no damage use other flee method'" chance="$debugchance" />
+        <return value="false"/>
+      </do_elseif>
+
+      <label name="search" />
+      <set_value name="$destinations" value="this.ship.fleet.commander.allsubordinates" />
+
+      <create_list name="$destinationsToFleeTo" />
+
+      <do_all exact="$destinations.count" counter="$i">
+        <set_value name="$d" value="$destinations.{i}" />
+        <do_if value="$d.isoperational and $d.trueowner == this.ship.trueowner and $d.sector == this.ship.sector and $d.cansupplyclass.{ship.realclass} and $d.shiptrader and $d.dockingallowed.{this.ship}">
+          <append_to_list name="$destinationsToFleeTo" exact="$d"/>
+        </do_if>
+      </do_all>
+
+      <do_if value="$destinationsToFleeTo.count lt 1">
+        <debug_text text="'no destinations ' + $destinationsToFleeTo" chance="$debugchance" />
+        <return value="false "/>
+      </do_if>
+
+      <debug_text text="'found '+ $destinationsToFleeTo.count + ' potential targets, finding closest one.'" chance="$debugchance" />
+      <sort_list list="$destinationsToFleeTo" sortbyvalue="this.ship.distanceto.{loop.element}" />
+      <set_value name="$destination" exact="$destinationsToFleeTo.{1}" />
+
+      <!-- Dock the drones -->
+      <run_script name="'lib.recall.subordinates'">
+        <param name="timeout" value="-1s" comment="recall drones"/>
+      </run_script>
+
+      <do_if value="$destination">
+        <request_docking ship="this.ship" container="$destination" queuedresult="$queuedresult" grantedresult="$grantedresult" />
+
+        <do_if value="this.ship.assigneddock.exists">
+          <get_docking_approach_pos position="$approachpos" rotation="$approachrot" dock="this.ship.assigneddock" ship="this.ship" />
+
+          <do_if value="this.attention ge attention.visible">
+            <debug_text text="'only set spline on high attention'" chance="$debugchance" />
+            <set_flight_control_model object="this.ship" flightcontrolmodel="flightcontrolmodel.spline" />
+          </do_if>
+
+          <!-- boost to it -->
+          <debug_text text="'move to approachpos'" chance="$debugchance" />
+          <move_to object="this.ship" destination="this.ship.assigneddock" forcesteering="false" finishonapproach="true" forceposition="false" forcerotation="false" boost="true" travel="true">
+            <position value="$approachpos" />
+            <rotation value="$approachrot" />
+            <interrupt_after_time time="10min"/>
+          </move_to>
+        </do_if>
+        <do_else>
+          <remove_docking_request ship="this.ship" container="$destination" immediate="true"/>
+          <return value="false"/>
+        </do_else>
+      </do_if>
+      <do_else>
+        <return value="false"/>
+      </do_else>
+
+      <label name="dock" />
+
+      <debug_text text="'dock at destination %1'.[$destination.knownname]" chance="$debugchance" />
+
+      <!-- NB: has to be a run_script because the Flee order is critical at this point. TODO: reevaluate and consider creating a DockAt order and an Undock order further below if Flee does not have to be critical. order.dock will also take care of cleaning up docking requests if docking fails -->
+      <run_script name="'order.dock'" result="$docked">
+        <param name="destination" value="$destination"/>
+      </run_script>
+
+      <do_if value="not $docked">
+        <return value="false"/>
+      </do_if>
+
+      <label name="repair" />
+
+      <!-- Get Fresh Data About Damage -->
+      <find_object_component name="$damagedcomponents" object="this.ship" checkoperational="false" multiple="true">
+        <match_any>
+          <match restorable="true" comment="wrecked"/>
+          <match repairable="true" invulnerable="false">
+            <match_hull min="100" negate="true"/>
+          </match>
+          <match needsrepair="true" invulnerable="false">
+            <match_hull min="100" negate="true"/>
+          </match>
+        </match_any>
+      </find_object_component>
+
+      <set_value name="$damaged" exact="this.ship.hull != this.ship.maxhull or ($damagedcomponents.count gt 0 and $damagedcomponents.{1}.exists)"/>
+
+      <do_if value="$damaged">
+        <signal_objects object="$destination" param="'repairs_initiate'" param2="this.ship" param3="[100, $damagedcomponents]"/>
+
+        <wait exact="10min">
+          <interrupt>
+            <conditions>
+              <event_object_signalled object="this.ship" param="'repairs_done'"/>
+            </conditions>
+            <actions>
+              <debug_text text="'%s %s %s repaired. hullpercentage: %s'.[this.ship.idcode, this.ship.knownname, this.ship, this.ship.hullpercentage]" chance="$debugchance"/>
+            </actions>
+          </interrupt>
+        </wait>
+      </do_if>
+
+      <label name="checkifsafe" />
+
+      <do_if value="this.ship.primarypurpose != purpose.fight">
+        <set_value name="$safechecks" exact="1"/>
+        <do_while value="($safechecks le 3) and $attacker.isoperational and (this.ship.distanceto.{$attacker} lt 15km)">
+          <set_value name="$safechecks" operation="add" exact="1"/>
+          <!-- if we are still not sure if it is safe after 3 waits, just risk it -->
+          <wait min="1min" max="2min">
+            <interrupt>
+              <conditions>
+                <check_any>
+                  <event_object_destroyed object="$attacker" check="false"/>
+                  <event_object_changed_zone object="$attacker" check="false"/>
+                  <event_object_changed_zone object="this.ship" />
+                </check_any>
+              </conditions>
+            </interrupt>
+          </wait>
+          <debug_text text="'wait for %1 to go away'.[$attacker.knownname]" chance="$debugchance" />
+        </do_while>
+      </do_if>
+
+      <label name="undock" />
+      <run_script name="'move.undock'" />
+
+      <debug_text text="'stop running/hiding'" chance="$debugchance" />
+      <return value="true"/>
+
+    </actions>
+  </attention>
+  <on_abort>
+    <!-- must clean up docking request if we made one -->
+    <remove_docking_request ship="this.ship" container="@$destination" immediate="true"/>
+  </on_abort>
+</aiscript>

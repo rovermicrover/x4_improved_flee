@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<diff>
+  <add sel="/aiscript[@name='interrupt.attacked']/interrupts/library/handler[@name='AttackHandler']/actions/do_if/do_elseif[@value='@$fleerespond']/do_if[@value='event.object.iscapitalship']" pos="after">
+    <do_elseif value="event.object.fleet.commander.exists">
+      <set_value name="$flee" exact="'fleet'" />
+    </do_elseif>
+  </add>
+</diff>
