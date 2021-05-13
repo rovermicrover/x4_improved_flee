@@ -22,17 +22,17 @@
         <set_value name="$method" exact="6"/>
       </do_else>
     </do_if>
-  </add>
+  </replace>
 
-  <add sel="/aiscript[@name='move.flee']/attention[@min='unknown']/do_if[@value='$method == 5']" pos="before">
+  <add sel="/aiscript[@name='move.flee']/attention[@min='unknown']/actions/do_elseif[@value='$method == 4']" pos="after">
     <!-- fleet -->
-    <do_if value="$method == 4">
+    <do_elseif value="$method == 5">
       <resume label="fleet" />
-    </do_if>
+    </do_elseif>
 
   </add>
 
-  <add sel="/aiscript[@name='move.flee']/attention[@min='unknown']/label[@name='highway']" pos="before">
+  <add sel="/aiscript[@name='move.flee']/attention[@min='unknown']/actions/label[@name='highway']" pos="before">
     <label name="fleet" />
     <run_script name="'move.flee.fleet'" result="$success">
       <param name="attacker" value="$attacker" />
@@ -43,6 +43,5 @@
     <do_elseif value="this.assignedcontrolled.primarypurpose == purpose.fight">
       <resume label="boost"/>
     </do_elseif>
-
   </add>
 </diff>

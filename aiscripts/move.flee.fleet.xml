@@ -59,7 +59,7 @@
       <do_if value="not $damaged and this.ship.primarypurpose == purpose.fight">
         <debug_text text="'combat ship with no damage use other flee method'" chance="$debugchance" />
         <return value="false"/>
-      </do_elseif>
+      </do_if>
 
       <label name="search" />
       <set_value name="$destinations" value="this.ship.fleet.commander.allsubordinates" />
